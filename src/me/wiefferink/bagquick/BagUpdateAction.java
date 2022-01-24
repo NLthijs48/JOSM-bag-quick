@@ -35,7 +35,7 @@ import java.util.stream.Collectors;
 import static org.openstreetmap.josm.tools.I18n.tr;
 
 // TODO:
-// - Address node support
+// - Address node support (when updating geometry: check that address nodes are still inside)
 // - Update existing way support
 // - Cascade to surrounding buildings support (and protection of surroundings)
 // - Better feedback/history panel?
