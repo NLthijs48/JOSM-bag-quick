@@ -351,6 +351,7 @@ public class BagUpdateAction extends MapMode implements MouseListener {
         Collection<Command> updateBuildingCommands = new LinkedList<>();
 
         // Update nodes in the target Way
+        // TODO: skip when the same
         updateBuildingCommands.add(new ChangeNodesCommand(targetWay, resultNodes));
 
         // Move existing nodes to the correct location
@@ -383,6 +384,13 @@ public class BagUpdateAction extends MapMode implements MouseListener {
         if (updateStartDateCommand != null) {
             updateBuildingCommands.add(updateStartDateCommand);
             // TODO: add this to the notification as well
+        }
+
+        // Detect no updates case
+        if (updateBuildingCommands.isEmpty()) {
+            Logging.info("Building is already up-to-date");
+            notification(tr("Building is already up-to-date"));
+            return;
         }
 
         // Execute the changes
