@@ -1,9 +1,13 @@
 package me.wiefferink.bagquick;
 
+import edu.princeton.cs.algs4.AssignmentProblem;
 import org.openstreetmap.josm.actions.mapmode.MapMode;
 import org.openstreetmap.josm.command.AddCommand;
+import org.openstreetmap.josm.command.ChangeNodesCommand;
 import org.openstreetmap.josm.command.ChangePropertyCommand;
 import org.openstreetmap.josm.command.Command;
+import org.openstreetmap.josm.command.MoveCommand;
+import org.openstreetmap.josm.command.RemoveNodesCommand;
 import org.openstreetmap.josm.command.SequenceCommand;
 import org.openstreetmap.josm.data.UndoRedoHandler;
 import org.openstreetmap.josm.data.coor.LatLon;
@@ -27,9 +31,12 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.openstreetmap.josm.tools.I18n.tr;
@@ -46,6 +53,14 @@ import static org.openstreetmap.josm.tools.I18n.tr;
  * - one-click imports
  */
 public class BagUpdateAction extends MapMode implements MouseListener {
+
+    /**
+     * Up to this number of nodes, do slow pair matching that is O(n^2)
+     * - For higher node counts fall back to O(n*log(n)) algorithm
+     * - TODO: probably up to 50 or so nodes is fine?
+     */
+    private static final int MAX_SLOW_PAIRING_NODE_COUNT = 20;
+    private static final boolean DEBUG = true;
 
     public BagUpdateAction() {
         // TODO update icon
@@ -188,39 +203,196 @@ public class BagUpdateAction extends MapMode implements MouseListener {
         // Find the Way on the OSM layer
         Way osmWay = findOsmWay(clickedLatLon, searchBbox, bagRef);
         if (osmWay == null) {
-            createNewTarget(bagWay);
+            createNewBuilding(bagWay);
             return;
         }
 
         Logging.info("    found OSM way: "+osmWay);
-        notification("Found BAG ref "+bagRef+", with matching existing way "+osmWay.getId()+" 🎊 😁");
+        updateExistingBuilding(bagWay, osmWay);
+    }
 
-        // Track changes in a list
-        Collection<Command> commands = new LinkedList<>();
+    /**
+     * Update an existing building with new geometry and tags
+     */
+    private void updateExistingBuilding(Way sourceWay, Way targetWay) {
+        String bagRef = sourceWay.get("ref:bag");
 
-        // TODO: do building outline changes
+        // Match source nodes to target nodes in a way that moves them as little as possible
+        // - code roughly based on the ReplaceBuilding action
+        Map<Node, Node> sourceToTargetNode = new HashMap<>();
+        boolean useSlow = true;
+        int sourceNodeCount = sourceWay.getNodesCount();
+        List<Node> sourceNodes = sourceWay.getNodes();
+        Set<Node> sourceNodesLeft = new HashSet<>(sourceNodes);
+        int targetNodeCount = targetWay.getNodesCount();
+        List<Node> targetNodes = targetWay.getNodes();
+        Set<Node> targetNodesLeft = new HashSet<>(targetNodes);
+        if (sourceNodeCount < MAX_SLOW_PAIRING_NODE_COUNT && targetNodeCount < MAX_SLOW_PAIRING_NODE_COUNT) {  // use robust, but slower assignment
+            int N = Math.max(sourceNodeCount, targetNodeCount);
+            double[][] cost = new double[N][N];
+            for (int i = 0; i < N; i++) {
+                for (int j = 0; j < N; j++) {
+                    cost[i][j] = Double.MAX_VALUE;
+                }
+            }
 
+            // TODO: should there be a max distance? Maybe only for nodes that are attached to other things
+            double maxDistance = 1;
+            for (int sourceNodeIndex = 0; sourceNodeIndex < sourceNodeCount; sourceNodeIndex++) {
+                for (int targetNodeIndex = 0; targetNodeIndex < targetNodeCount; targetNodeIndex++) {
+                    double distance = sourceNodes.get(sourceNodeIndex).getCoor().distance(targetNodes.get(targetNodeIndex).getCoor());
+                    if (distance > maxDistance) {
+                        cost[sourceNodeIndex][targetNodeIndex] = Double.MAX_VALUE;
+                    } else {
+                        cost[sourceNodeIndex][targetNodeIndex] = distance;
+                    }
+                }
+            }
+            AssignmentProblem assignment;
+            try {
+                assignment = new AssignmentProblem(cost);
+                for (int sourceNodeIndex = 0; sourceNodeIndex < N; sourceNodeIndex++) {
+                    int targetNodeIndex = assignment.sol(sourceNodeIndex);
+                    if (cost[sourceNodeIndex][targetNodeIndex] != Double.MAX_VALUE) {
+                        Node targetNode = targetNodes.get(targetNodeIndex);
+                        targetNodesLeft.remove(targetNode);
 
-        notification(tr("TODO: Updated BAG building: {0}", bagRef));
+                        Node sourceNode = sourceNodes.get(sourceNodeIndex);
+                        sourceNodesLeft.remove(sourceNode);
 
-        /*
-        // Update start_date tag
-        Command updateStartDateCommand = applyStartDate(bagWay, osmWay);
-        // TODO: collect human-readable changes somewhere
-        if (updateStartDateCommand != null) {
-            commands.add(updateStartDateCommand);
+                        // Associate sourceNode and targetNode to later do a move
+                        sourceToTargetNode.put(sourceNode, targetNode);
+                    }
+                }
+            } catch (Exception e) {
+                useSlow = false;
+                notification(
+                    tr("Exceeded iteration limit for robust method, using simpler method."),
+                    JOptionPane.WARNING_MESSAGE
+                );
+                sourceToTargetNode = new HashMap<>();
+            }
         }
 
+        // TODO: implement a backup, like ReplaceBuilding does
+        if (!useSlow) {
+            /*
+            for (Node n : geometryPool) {
+                Node nearest = findNearestNode(n, nodePool);
+                if (nearest != null) {
+                    nodePairs.put(n, nearest);
+                    nodePool.remove(nearest);
+                }
+            }
+            */
+        }
+
+        if (DEBUG) {
+            Logging.info("Resulting node pairs:");
+            for (Map.Entry<Node, Node> entry : sourceToTargetNode.entrySet()) {
+                Logging.info("    Pair:");
+                Node sourceNode = entry.getValue();
+                Logging.info("        source: {0} {1}", sourceNode.get("name"), sourceNode.getCoor());
+                Node targetNode = entry.getKey();
+                Logging.info("        target: {0} {1}", targetNode.get("name"), targetNode.getCoor());
+                Logging.info("        distance: {0}", sourceNode.getCoor().distance(targetNode.getCoor()));
+            }
+
+            Logging.info("Leftover source nodes:");
+            for (Node sourceNodeLeft : sourceNodesLeft) {
+                Logging.info("    {0} {1}", sourceNodeLeft.get("name"), sourceNodeLeft.getCoor());
+            }
+
+            Logging.info("Leftover target nodes:");
+            for (Node targetNodeLeft : targetNodesLeft) {
+                Logging.info("    {0} {1}", targetNodeLeft.get("name"), targetNodeLeft.getCoor());
+            }
+        }
+
+        // Apply node updates
+        // - Loop through the source nodes in-order here to build the Way correctly
+        List<Node> resultNodes = new LinkedList<>();
+        List<Node> nodesToAdd = new LinkedList<>();
+        for (Node sourceNode : sourceNodes) {
+            Node resultNode;
+            LatLon sourceCoor = sourceNode.getCoor();
+            if (sourceToTargetNode.containsKey(sourceNode)) {
+                // Use the mapped target node (update location later with MoveCommand)
+                resultNode = sourceToTargetNode.get(sourceNode);
+            } else {
+                // Create a new Node, an additional one is required
+                resultNode = new Node();
+                resultNode.setCoor(sourceCoor);
+                nodesToAdd.add(resultNode);
+            }
+
+            resultNodes.add(resultNode);
+        }
+
+        // Create new nodes
+        Collection<Command> createNodesCommands = new LinkedList<>();
+        if (!nodesToAdd.isEmpty()) {
+            for (Node nodeToAdd : nodesToAdd) {
+                createNodesCommands.add(new AddCommand(targetWay.getDataSet(), nodeToAdd));
+            }
+
+            // TODO: ideally do this in the same Sequence as below, test if that works
+            UndoRedoHandler.getInstance().add(SequenceCommand.wrapIfNeeded(tr("Create nodes"), createNodesCommands));
+        }
+
+        // Collect commands
+        Collection<Command> updateBuildingCommands = new LinkedList<>();
+
+        // Update nodes in the target Way
+        updateBuildingCommands.add(new ChangeNodesCommand(targetWay, resultNodes));
+
+        // Move existing nodes to the correct location
+        // TODO: double check if nodes are allowed to be moved:
+        // - warn when not uninteresting (see replace building plugin)
+        // - warn when part of other ways (like a connected house/fence/etc)
+        int nodesUpToDate = 0;
+        int nodesMoved = 0;
+        for (Node sourceNode : sourceToTargetNode.keySet()) {
+            Node targetNode = sourceToTargetNode.get(sourceNode);
+            LatLon sourceCoor = sourceNode.getCoor();
+            if (sourceCoor.equalsEpsilon(targetNode.getCoor())) {
+                nodesUpToDate++;
+                continue;
+            }
+            nodesMoved++;
+            updateBuildingCommands.add(new MoveCommand(targetNode, sourceCoor));
+        }
+
+        // Remove nodes that are not used anymore
+        // TODO: double check if nodes can be removed:
+        // - not allowed when tagged with something (not uninteresting)
+        // - not allowed when part of other ways (building:part, other house, fence, etc)
+        if (!targetNodesLeft.isEmpty()) {
+            updateBuildingCommands.add(new RemoveNodesCommand(targetWay, targetNodesLeft));
+        }
+
+        // Update start_date tag
+        Command updateStartDateCommand = applyStartDate(sourceWay, targetWay);
+        if (updateStartDateCommand != null) {
+            updateBuildingCommands.add(updateStartDateCommand);
+            // TODO: add this to the notification as well
+        }
+
+        // Execute the changes
         // TODO: better history summary message (can also be used in the notification)
-        Command combinedCommand = SequenceCommand.wrapIfNeeded(tr("BAG update of way {0}", osmWay.getId()), commands);
+        Command combinedCommand = SequenceCommand.wrapIfNeeded(tr("BAG update of {0}", bagRef), updateBuildingCommands);
         UndoRedoHandler.getInstance().add(combinedCommand);
-        */
+
+        // Notify the user about the results
+        String summaryText = tr("Updated BAG building {0}:<br />{1} already up-to-date<br />{2} nodes moved<br />{3} nodes created<br />{4} nodes removed", bagRef, nodesUpToDate, nodesMoved, sourceNodesLeft.size(), targetNodesLeft.size());
+        Logging.info(summaryText);
+        notification(summaryText);
     }
 
     /**
      * Create the given Way in the OSM layer
      */
-    private void createNewTarget(Way sourceWay) {
+    private void createNewBuilding(Way sourceWay) {
         Logging.info("Creating a new BAG way");
         String bagRef = sourceWay.get("ref:bag");
         Collection<Command> wayAndNodesCommands = new LinkedList<>();
@@ -298,6 +470,7 @@ public class BagUpdateAction extends MapMode implements MouseListener {
         Logging.info("notification: "+message);
         new Notification("<strong>" + tr("Bag Quick") + "</strong><br />" + message)
             .setIcon(messageType)
+            .setDuration(Notification.TIME_LONG)
             .show();
     }
 
