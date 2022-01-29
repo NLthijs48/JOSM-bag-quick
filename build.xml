@@ -16,10 +16,15 @@
     <!--<property name="plugin.icon" value="..."/>-->
     <!--<property name="plugin.link" value="..."/>-->
     <!--<property name="plugin.early" value="..."/>-->
-    <!--<property name="plugin.requires" value="..."/>-->
+    <!-- ods-bag is currently available upon request, not in the JOSM plugin directory -->
+    <property name="plugin.requires" value="utilsplugin2;ods-bag"/>
     <!--<property name="plugin.stage" value="..."/>-->
 
     <!-- ** include targets that all plugins have in common ** -->
     <import file="../build-common.xml"/>
 
+    <!-- For the AssignmentProblem class -->
+    <fileset id="plugin.requires.jars" dir="${plugin.dist.dir}">
+        <include name="utilsplugin2.jar"/>
+    </fileset>
 </project>
