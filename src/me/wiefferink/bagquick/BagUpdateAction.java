@@ -255,12 +255,19 @@ public class BagUpdateAction extends MapMode implements MouseListener {
                     int targetNodeIndex = assignment.sol(sourceNodeIndex);
                     if (cost[sourceNodeIndex][targetNodeIndex] != Double.MAX_VALUE) {
                         Node targetNode = targetNodes.get(targetNodeIndex);
-                        targetNodesLeft.remove(targetNode);
-
                         Node sourceNode = sourceNodes.get(sourceNodeIndex);
-                        sourceNodesLeft.remove(sourceNode);
 
-                        // Associate sourceNode and targetNode to later do a move
+                        if (!targetNodesLeft.contains(targetNode)) {
+                            Logging.info("targetNode already mapped to another sourceNode: ", targetNode, sourceNode);
+                            continue;
+                        }
+                        if (!sourceNodesLeft.contains(sourceNode)) {
+                            Logging.info("sourceNode already mapped to another targetNode: ", sourceNode, targetNode);
+                            continue;
+                        }
+
+                        targetNodesLeft.remove(targetNode);
+                        sourceNodesLeft.remove(sourceNode);
                         sourceToTargetNode.put(sourceNode, targetNode);
                     }
                 }
