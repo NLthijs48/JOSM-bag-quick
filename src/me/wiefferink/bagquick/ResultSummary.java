@@ -15,6 +15,7 @@ import static org.openstreetmap.josm.tools.I18n.tr;
  */
 public class ResultSummary {
 
+	private boolean hasFailed = false;
 	/** Notes about the result, indicates what has changed */
 	private List<String> notes = new LinkedList<>();
 	/** Warnings about rough edges in the result */
@@ -29,10 +30,16 @@ public class ResultSummary {
 	}
 
 	public void failed(String message) {
+		this.hasFailed = true;
 		notification(message, JOptionPane.ERROR_MESSAGE);
 	}
 
 	public void sendNotification() {
+		if (hasFailed) {
+			// Already failed and done
+			return;
+		}
+
 		if (this.notes.isEmpty() && this.warnings.isEmpty()) {
 			// TODO: better message than this?
 			notification(tr("Action completed without notes/warnings"), JOptionPane.INFORMATION_MESSAGE);

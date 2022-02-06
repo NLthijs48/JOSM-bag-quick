@@ -20,9 +20,9 @@ import org.openstreetmap.josm.gui.MapView;
 import org.openstreetmap.josm.gui.layer.Layer;
 import org.openstreetmap.josm.gui.layer.OsmDataLayer;
 import org.openstreetmap.josm.tools.Geometry;
-import org.openstreetmap.josm.tools.Logging;
 
 import java.awt.*;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static me.wiefferink.bagquick.BagQuickPlugin.debug;
 import static org.openstreetmap.josm.tools.I18n.tr;
 import static org.openstreetmap.josm.tools.I18n.trn;
 
@@ -92,8 +93,8 @@ public class BuildingUpdate {
 	}
 
 	public boolean executeInternal() {
-		BagQuickPlugin.debug("BuildingUpdate.execute()");
-		BagQuickPlugin.debug("clicked LatLon={0}", clickedLatLon);
+		debug("BuildingUpdate.execute()");
+		debug("clicked LatLon={0}", clickedLatLon);
 
 		// Check that the BAG ODS and BAG OSM layers are present
 		if (!checkLayers()) {
@@ -110,7 +111,7 @@ public class BuildingUpdate {
 			return createNewBuilding();
 		}
 
-		BagQuickPlugin.debug("    found OSM way: "+osmWay);
+		debug("    found OSM way: {0}", osmWay);
 		return updateExistingBuilding();
 	}
 
@@ -163,7 +164,7 @@ public class BuildingUpdate {
 	private boolean findBagWay() {
 		// Get ways around the clicked point
 		java.util.List<Way> bagSearchWays = this.bagDataSet.searchWays(getSearchBox());
-		BagQuickPlugin.debug("findBagWay() {0} results:", bagSearchWays.size());
+		debug("findBagWay() {0} results:", bagSearchWays.size());
 		printWayList(bagSearchWays);
 
 		Node clickedNode = new Node(this.clickedLatLon);
@@ -204,8 +205,8 @@ public class BuildingUpdate {
 			return false;
 		}
 
-		BagQuickPlugin.debug("findBagWay() ref:bag="+ bagRef);
-		BagQuickPlugin.debug("    found BAG way: "+bagWay);
+		debug("findBagWay() ref:bag="+ bagRef);
+		debug("    found BAG way: "+bagWay);
 		this.bagWay = result;
 		return true;
 	}
@@ -220,7 +221,7 @@ public class BuildingUpdate {
 
 		// Get ways around the clicked point
 		java.util.List<Way> osmSearchWays = this.osmDataSet.searchWays(getSearchBox());
-		BagQuickPlugin.debug("findOsmWay() {0} search results:", osmSearchWays.size());
+		debug("findOsmWay() {0} search results:", osmSearchWays.size());
 		printWayList(osmSearchWays);
 
 		List<Way> osmMatchingWays = osmSearchWays
@@ -256,6 +257,11 @@ public class BuildingUpdate {
 	 */
 	private boolean updateExistingBuilding() {
 		String bagRef = bagWay.get("ref:bag");
+
+		// Confirm notes before doing anything else
+		if (!confirmBuildingNotes()) {
+			return false;
+		}
 
 		// Match BAG nodes to OSM nodes in a way that moves them as little as possible
 		// - code roughly based on the ReplaceBuilding action
@@ -331,13 +337,13 @@ public class BuildingUpdate {
 
 		// debug logging
 		printNodePairs(bagToOsmNode);
-		BagQuickPlugin.debug("Leftover BAG nodes:");
+		debug("Leftover BAG nodes:");
 		for (Node bagNodeLeft : bagNodesLeft) {
-			BagQuickPlugin.debug("    {0} {1}", bagNodeLeft.get("name"), bagNodeLeft.getCoor());
+			debug("    {0} {1}", bagNodeLeft.get("name"), bagNodeLeft.getCoor());
 		}
-		BagQuickPlugin.debug("Leftover OSM nodes:");
+		debug("Leftover OSM nodes:");
 		for (Node osmNodeLeft : osmNodesLeft) {
-			BagQuickPlugin.debug("    {0} {1}", osmNodeLeft.get("name"), osmNodeLeft.getCoor());
+			debug("    {0} {1}", osmNodeLeft.get("name"), osmNodeLeft.getCoor());
 		}
 
 		// Apply node updates
@@ -456,19 +462,51 @@ public class BuildingUpdate {
 		return true;
 	}
 
+	/** If there are notes on the building, let the user confirm before doing updates */
+	private boolean confirmBuildingNotes() {
+		// Test out dialog to confirm
+		Map<String, String> noteTags = new HashMap<>();
+		for (String noteTag : Arrays.asList("note", "note:bag", "fixme")) {
+			if (!osmWay.hasTag(noteTag)) {
+				continue;
+			}
+
+			String note = osmWay.get(noteTag);
+			if (note == null || note.isEmpty()) {
+				continue;
+			}
+
+			noteTags.put(noteTag, note);
+		}
+		if (noteTags.isEmpty()) {
+			// No notes to worry about
+			return true;
+		}
+
+		debug("Constructing note dialog");
+		NoteConfirmationDialog dialog = new NoteConfirmationDialog(noteTags);
+		dialog.setVisible(true);
+		if (dialog.isCanceled()) {
+			resultSummary.failed(tr("Building update canceled because of notes"));
+			return false;
+		}
+		debug("dialog result: " + dialog.isCanceled());
+		return !dialog.isCanceled();
+	}
+
 	private static void printNodePairs(Map<Node, Node> fromTo) {
 		if (!BagQuickPlugin.DEBUG) {
 			return;
 		}
 
-		BagQuickPlugin.debug("Resulting node pairs:");
+		debug("Resulting node pairs:");
 		for (Map.Entry<Node, Node> entry : fromTo.entrySet()) {
-			BagQuickPlugin.debug("    Pair:");
+			debug("    Pair:");
 			Node bagNode = entry.getValue();
-			BagQuickPlugin.debug("        BAG node: {0} {1}", bagNode.get("name"), bagNode.getCoor());
+			debug("        BAG node: {0} {1}", bagNode.get("name"), bagNode.getCoor());
 			Node osmNode = entry.getKey();
-			BagQuickPlugin.debug("        OSM node: {0} {1}", osmNode.get("name"), osmNode.getCoor());
-			BagQuickPlugin.debug("        distance: {0}", bagNode.getCoor().distance(osmNode.getCoor()));
+			debug("        OSM node: {0} {1}", osmNode.get("name"), osmNode.getCoor());
+			debug("        distance: {0}", bagNode.getCoor().distance(osmNode.getCoor()));
 		}
 	}
 
@@ -476,7 +514,7 @@ public class BuildingUpdate {
 	 * Create the given Way in the OSM layer
 	 */
 	private boolean createNewBuilding() {
-		Logging.info("Creating a new BAG way");
+		debug("Creating a new BAG way");
 		String bagRef = this.bagWay.get("ref:bag");
 		Collection<Command> wayAndNodesCommands = new LinkedList<>();
 
@@ -504,7 +542,7 @@ public class BuildingUpdate {
 				continue;
 			}
 
-			Logging.info("    adding tag {0}={1}", sourceTag.getKey(), sourceTag.getValue());
+			debug("    adding tag {0}={1}", sourceTag.getKey(), sourceTag.getValue());
 			tagsCommands.add(new ChangePropertyCommand(osmWay, sourceTag.getKey(), sourceTag.getValue()));
 		}
 
@@ -562,11 +600,11 @@ public class BuildingUpdate {
 
 	private void printWayList(Collection<Way> ways) {
 		for (Way way : ways) {
-			BagQuickPlugin.debug("    way:"+way.getId());
-			BagQuickPlugin.debug("        area="+way.isArea());
-			BagQuickPlugin.debug("        containsClickedPoint="+way.getBBox().bounds(this.clickedLatLon));
-			BagQuickPlugin.debug("        building="+way.get("building"));
-			BagQuickPlugin.debug("        ref:bag="+way.get("ref:bag"));
+			debug("    way:"+way.getId());
+			debug("        area="+way.isArea());
+			debug("        containsClickedPoint="+way.getBBox().bounds(this.clickedLatLon));
+			debug("        building="+way.get("building"));
+			debug("        ref:bag="+way.get("ref:bag"));
 		}
 	}
 }
