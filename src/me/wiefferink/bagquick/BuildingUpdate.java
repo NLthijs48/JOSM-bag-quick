@@ -20,6 +20,7 @@ import org.openstreetmap.josm.gui.MapView;
 import org.openstreetmap.josm.gui.Notification;
 import org.openstreetmap.josm.gui.layer.Layer;
 import org.openstreetmap.josm.gui.layer.OsmDataLayer;
+import org.openstreetmap.josm.tools.Geometry;
 import org.openstreetmap.josm.tools.Logging;
 
 import javax.swing.*;
@@ -159,14 +160,18 @@ public class BuildingUpdate {
 		debug("findBagWay() {0} results:", bagSearchWays.size());
 		printWayList(bagSearchWays);
 
+		Node clickedNode = new Node(this.clickedLatLon);
 		java.util.List<Way> bagMatchingWays = bagSearchWays
 				.stream()
 				// Way should be an area (not an address point or some other line)
 				.filter(Way::isArea)
-				// Way should surround the clicked point
-				.filter(way -> way.getBBox().bounds(this.clickedLatLon))
 				// Has a building=* tag
 				.filter(way -> way.hasTag("building"))
+				// Clicked point should be inside the way (quick filter to get rid of most)
+				.filter(way -> way.getBBox().bounds(this.clickedLatLon))
+				// Clicked point should be inside the way (strict filter, dealing with polygons)
+				.filter(way -> Geometry.nodeInsidePolygon(clickedNode, way.getNodes()))
+				// To a list
 				.collect(Collectors.toList());
 
 		// No result
@@ -177,9 +182,9 @@ public class BuildingUpdate {
 
 		// Multiple results
 		if (bagMatchingWays.size() > 1) {
-			// TODO: maybe let the user select one from a list
+			// This should essentially never happen, but could offer a selection UI in the future here
 			String bagWayList = bagMatchingWays.stream().map(way -> way.getDisplayName(DefaultNameFormatter.getInstance())).collect(Collectors.joining("<br />"));
-			notification(tr("Found multiple BAG ways, don't know which to update: <br />{0}", bagWayList));
+			notification("Found multiple BAG ways, don't know which to update: <br />"+bagWayList);
 			return false;
 		}
 
