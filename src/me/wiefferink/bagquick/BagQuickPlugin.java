@@ -29,7 +29,7 @@ public class BagQuickPlugin extends Plugin {
 	/** Print debug logging, only when enabled */
 	public static void debug(String pattern, Object... args) {
 		if (DEBUG) {
-			Logging.debug(pattern, args);
+			Logging.info(pattern, args);
 		}
 	}
 
