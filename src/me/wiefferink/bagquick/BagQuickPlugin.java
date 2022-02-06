@@ -9,9 +9,11 @@ import org.openstreetmap.josm.tools.Logging;
 
 /**
  * This is the main class for the AreaSelector plugin.
- *
  */
 public class BagQuickPlugin extends Plugin {
+
+	/** Enables debug logging */
+	public static final boolean DEBUG = true;
 
 	BagUpdateAction bagUpdateAction;
 
@@ -22,6 +24,13 @@ public class BagQuickPlugin extends Plugin {
 
 		bagUpdateAction = new BagUpdateAction();
 		MainMenu.add(MainApplication.getMenu().toolsMenu, bagUpdateAction);
+	}
+
+	/** Print debug logging, only when enabled */
+	public static void debug(String pattern, Object... args) {
+		if (DEBUG) {
+			Logging.debug(pattern, args);
+		}
 	}
 
 }

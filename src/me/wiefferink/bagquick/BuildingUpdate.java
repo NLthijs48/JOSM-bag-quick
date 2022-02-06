@@ -17,13 +17,11 @@ import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapView;
-import org.openstreetmap.josm.gui.Notification;
 import org.openstreetmap.josm.gui.layer.Layer;
 import org.openstreetmap.josm.gui.layer.OsmDataLayer;
 import org.openstreetmap.josm.tools.Geometry;
 import org.openstreetmap.josm.tools.Logging;
 
-import javax.swing.*;
 import java.awt.*;
 import java.util.Collection;
 import java.util.HashMap;
@@ -35,6 +33,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.openstreetmap.josm.tools.I18n.tr;
+import static org.openstreetmap.josm.tools.I18n.trn;
 
 // TODO:
 // - extract findOsmWay and findBagWay to a Search class
@@ -54,9 +53,6 @@ public class BuildingUpdate {
 	 * - TODO: probably up to 50 or so nodes is fine?
 	 */
 	private static final int MAX_SLOW_PAIRING_NODE_COUNT = 20;
-
-	/** Enables debug logging */
-	private static final boolean DEBUG = true;
 
 	/** The point on the map that has been clicked with the update tool */
 	private final Point clickedPoint;
@@ -78,7 +74,11 @@ public class BuildingUpdate {
 	/** Existing way in OSM that needs to be updated, or null when there is none */
 	private Way osmWay;
 
+	// Summary
+	private ResultSummary resultSummary;
+
 	public BuildingUpdate(Point clickedPoint) {
+		this.resultSummary = new ResultSummary();
 		this.mapView = MainApplication.getMap().mapView;
 		this.clickedPoint = clickedPoint;
 		this.clickedLatLon = this.mapView.getLatLon(clickedPoint.x, clickedPoint.y);
@@ -86,8 +86,14 @@ public class BuildingUpdate {
 
 	/** Starting point for the update */
 	public boolean execute() {
-		debug("BuildingUpdate.execute()");
-		debug("clicked LatLon={0}", clickedLatLon);
+		boolean result = executeInternal();
+		resultSummary.sendNotification();
+		return result;
+	}
+
+	public boolean executeInternal() {
+		BagQuickPlugin.debug("BuildingUpdate.execute()");
+		BagQuickPlugin.debug("clicked LatLon={0}", clickedLatLon);
 
 		// Check that the BAG ODS and BAG OSM layers are present
 		if (!checkLayers()) {
@@ -104,7 +110,7 @@ public class BuildingUpdate {
 			return createNewBuilding();
 		}
 
-		debug("    found OSM way: "+osmWay);
+		BagQuickPlugin.debug("    found OSM way: "+osmWay);
 		return updateExistingBuilding();
 	}
 
@@ -112,13 +118,13 @@ public class BuildingUpdate {
 	private boolean checkLayers() {
 		this.bagDataSet = getLayerDataSetByName("BAG ODS");
 		if (bagDataSet == null) {
-			notification(tr("BAG ODS layer not found! Make sure to use ODS > Enable > BAG first"));
+			resultSummary.failed(tr("BAG ODS layer not found! Make sure to use ODS > Enable > BAG first"));
 			return false;
 		}
 
 		this.osmDataSet = getLayerDataSetByName("BAG OSM");
 		if (osmDataSet == null) {
-			notification(tr("BAG OSM layer not found! Make sure to use ODS > Enable > BAG first"));
+			resultSummary.failed(tr("BAG OSM layer not found! Make sure to use ODS > Enable > BAG first"));
 			return false;
 		}
 
@@ -157,7 +163,7 @@ public class BuildingUpdate {
 	private boolean findBagWay() {
 		// Get ways around the clicked point
 		java.util.List<Way> bagSearchWays = this.bagDataSet.searchWays(getSearchBox());
-		debug("findBagWay() {0} results:", bagSearchWays.size());
+		BagQuickPlugin.debug("findBagWay() {0} results:", bagSearchWays.size());
 		printWayList(bagSearchWays);
 
 		Node clickedNode = new Node(this.clickedLatLon);
@@ -176,7 +182,7 @@ public class BuildingUpdate {
 
 		// No result
 		if (bagMatchingWays.isEmpty()) {
-			notification("Did not find a BAG building, try another location", JOptionPane.WARNING_MESSAGE);
+			resultSummary.failed(tr("Did not find a BAG building, try another location"));
 			return false;
 		}
 
@@ -184,7 +190,7 @@ public class BuildingUpdate {
 		if (bagMatchingWays.size() > 1) {
 			// This should essentially never happen, but could offer a selection UI in the future here
 			String bagWayList = bagMatchingWays.stream().map(way -> way.getDisplayName(DefaultNameFormatter.getInstance())).collect(Collectors.joining("<br />"));
-			notification("Found multiple BAG ways, don't know which to update: <br />"+bagWayList);
+			resultSummary.failed("Found multiple BAG ways, don't know which to update: <br />"+bagWayList);
 			return false;
 		}
 
@@ -194,12 +200,12 @@ public class BuildingUpdate {
 		// Check ref:bag presence
 		String bagRef = result.get("ref:bag");
 		if (bagRef == null || bagRef.isEmpty()) {
-			notification(tr("Clicked way in the BAG ODS layer has no ref:bag! Try another building"));
+			resultSummary.failed(tr("Clicked way in the BAG ODS layer has no ref:bag! Try another building"));
 			return false;
 		}
 
-		debug("findBagWay() ref:bag="+ bagRef);
-		debug("    found BAG way: "+bagWay);
+		BagQuickPlugin.debug("findBagWay() ref:bag="+ bagRef);
+		BagQuickPlugin.debug("    found BAG way: "+bagWay);
 		this.bagWay = result;
 		return true;
 	}
@@ -214,7 +220,7 @@ public class BuildingUpdate {
 
 		// Get ways around the clicked point
 		java.util.List<Way> osmSearchWays = this.osmDataSet.searchWays(getSearchBox());
-		debug("findOsmWay() {0} search results:", osmSearchWays.size());
+		BagQuickPlugin.debug("findOsmWay() {0} search results:", osmSearchWays.size());
 		printWayList(osmSearchWays);
 
 		List<Way> osmMatchingWays = osmSearchWays
@@ -236,7 +242,7 @@ public class BuildingUpdate {
 		if (osmMatchingWays.size() > 1) {
 			// TODO: this is weird, ref:bag should never have duplicates
 			// TODO: prevent creating new Way because of returning null here
-			notification(tr("Found multiple BAG ways: {0}", osmMatchingWays.stream().map(way -> way.getDisplayName(DefaultNameFormatter.getInstance())).collect(Collectors.joining(", "))));
+			resultSummary.failed(tr("Found multiple BAG ways: {0}", osmMatchingWays.stream().map(way -> way.getDisplayName(DefaultNameFormatter.getInstance())).collect(Collectors.joining(", "))));
 			return false;
 		}
 
@@ -305,10 +311,7 @@ public class BuildingUpdate {
 				}
 			} catch (Exception e) {
 				useSlow = false;
-				notification(
-						tr("Exceeded iteration limit for robust method, using simpler method."),
-						JOptionPane.WARNING_MESSAGE
-				);
+				resultSummary.addNote(tr("Exceeded iteration limit for robust method, using simpler method."));
 				bagToOsmNode = new HashMap<>();
 			}
 		}
@@ -326,15 +329,15 @@ public class BuildingUpdate {
             */
 		}
 
-		// Debug logging
+		// debug logging
 		printNodePairs(bagToOsmNode);
-		debug("Leftover BAG nodes:");
+		BagQuickPlugin.debug("Leftover BAG nodes:");
 		for (Node bagNodeLeft : bagNodesLeft) {
-			debug("    {0} {1}", bagNodeLeft.get("name"), bagNodeLeft.getCoor());
+			BagQuickPlugin.debug("    {0} {1}", bagNodeLeft.get("name"), bagNodeLeft.getCoor());
 		}
-		debug("Leftover OSM nodes:");
+		BagQuickPlugin.debug("Leftover OSM nodes:");
 		for (Node osmNodeLeft : osmNodesLeft) {
-			debug("    {0} {1}", osmNodeLeft.get("name"), osmNodeLeft.getCoor());
+			BagQuickPlugin.debug("    {0} {1}", osmNodeLeft.get("name"), osmNodeLeft.getCoor());
 		}
 
 		// Apply node updates
@@ -391,67 +394,81 @@ public class BuildingUpdate {
 			nodesMoved++;
 			updateBuildingCommands.add(new MoveCommand(osmNode, bagCoor));
 		}
+		if (nodesUpToDate > 0) {
+			resultSummary.addNote(trn("{0} node up-to-date", "{0} nodes up-to-date", nodesUpToDate, nodesUpToDate));
+		}
+		if (nodesMoved > 0) {
+			resultSummary.addNote(trn("{0} node moved", "{0} nodes moved", nodesMoved, nodesMoved));
+		}
+		if (!bagNodesLeft.isEmpty()) {
+			resultSummary.addNote(trn("{0} node created", "{0} nodes created", bagNodesLeft.size(), bagNodesLeft.size()));
+		}
 
 		// Remove nodes that are not used anymore
-		// TODO: double check if nodes can be removed:
 		// - not allowed when tagged with something (not uninteresting)
 		// - not allowed when part of other ways (building:part, other house, fence, etc)
 		int nodesRemoved = 0;
+		int nodesInOtherWays = 0;
+		int nodesTagged = 0;
 		for (Node osmNodeLeft : osmNodesLeft) {
 			List<Way> isInsideWays = osmNodeLeft.getParentWays();
 			isInsideWays.remove(osmWay);
 			if (!isInsideWays.isEmpty()) {
 				// Cannot remove node, is inside another way
-				// TODO: might need to connect this node to the updated osmWay anyway later though
+				nodesInOtherWays++;
 				continue;
 			}
 
 			if (osmNodeLeft.isTagged()) {
 				// Node itself has tags, cannot remove
-				// TODO: warn about this
+				nodesTagged++;
 				continue;
 			}
 
 			nodesRemoved++;
 			updateBuildingCommands.add(new DeleteCommand(osmNodeLeft));
 		}
+		if (nodesInOtherWays > 0) {
+			resultSummary.addWarning(trn("{0} node kept because it is part of another way", "{0} nodes kept because they are part of other ways", nodesInOtherWays, nodesInOtherWays));
+		}
+		if (nodesTagged > 0) {
+			resultSummary.addWarning(trn("{0} node kept because it has important tags", "{0} nodes kept because they have important tags", nodesTagged, nodesTagged));
+		}
+		if (nodesRemoved > 0) {
+			resultSummary.addNote(trn("{0} node removed", "{0} nodes removed", nodesRemoved, nodesRemoved));
+		}
 
 		// Update start_date tag
 		Command updateStartDateCommand = computeStartDateUpdate();
 		if (updateStartDateCommand != null) {
 			updateBuildingCommands.add(updateStartDateCommand);
-			// TODO: add this to the notification as well
 		}
 
 		// Detect no updates case
 		if (updateBuildingCommands.isEmpty()) {
-			notification(tr("Building is already up-to-date"));
+			resultSummary.addNote(tr("Building is already up-to-date"));
 			return true;
 		}
 
 		// Execute the changes
-		// TODO: better history summary message (can also be used in the notification)
 		Command combinedCommand = SequenceCommand.wrapIfNeeded(tr("BAG update of {0}", bagRef), updateBuildingCommands);
 		UndoRedoHandler.getInstance().add(combinedCommand);
-
-		// Notify the user about the results
-		notification(tr("Updated BAG building {0}:<br />{1} already up-to-date<br />{2} nodes moved<br />{3} nodes created<br />{4} nodes removed", bagRef, nodesUpToDate, nodesMoved, bagNodesLeft.size(), nodesRemoved));
 		return true;
 	}
 
-	private void printNodePairs(Map<Node, Node> fromTo) {
-		if (!DEBUG) {
+	private static void printNodePairs(Map<Node, Node> fromTo) {
+		if (!BagQuickPlugin.DEBUG) {
 			return;
 		}
 
-		debug("Resulting node pairs:");
+		BagQuickPlugin.debug("Resulting node pairs:");
 		for (Map.Entry<Node, Node> entry : fromTo.entrySet()) {
-			debug("    Pair:");
+			BagQuickPlugin.debug("    Pair:");
 			Node bagNode = entry.getValue();
-			debug("        BAG node: {0} {1}", bagNode.get("name"), bagNode.getCoor());
+			BagQuickPlugin.debug("        BAG node: {0} {1}", bagNode.get("name"), bagNode.getCoor());
 			Node osmNode = entry.getKey();
-			debug("        OSM node: {0} {1}", osmNode.get("name"), osmNode.getCoor());
-			debug("        distance: {0}", bagNode.getCoor().distance(osmNode.getCoor()));
+			BagQuickPlugin.debug("        OSM node: {0} {1}", osmNode.get("name"), osmNode.getCoor());
+			BagQuickPlugin.debug("        distance: {0}", bagNode.getCoor().distance(osmNode.getCoor()));
 		}
 	}
 
@@ -479,6 +496,7 @@ public class BuildingUpdate {
 		UndoRedoHandler.getInstance().add(wayAndNodesCommand);
 
 		// Apply all tags of the BAG way to the OSM way (at least building/ref:bag/source/source:date/start_date)
+		// TODO: do this for existing buildings as well  to fix up tags
 		Collection<Command> tagsCommands = new LinkedList<>();
 		for (Map.Entry<String, String> sourceTag : this.bagWay.getKeys().entrySet()) {
 			// Ignore tags prefixed with |ODS, those are only meant as background information
@@ -497,12 +515,10 @@ public class BuildingUpdate {
 		UndoRedoHandler.getInstance().add(tagsCommand);
 
 		// Notify about the result
-		String message = "New BAG building imported:<br />";
+		resultSummary.addNote(tr("New BAG building imported with {0} nodes", bagWay.getNodesCount())); // TODO: maybe use setHeader() or so
 		for (String osmWayTag : osmWay.getKeys().keySet()) {
-			message += "<br />" + osmWayTag + "=" + osmWay.get(osmWayTag);
+			resultSummary.addNote(tr(osmWayTag + "=" + osmWay.get(osmWayTag)));
 		}
-		notification(tr(message));
-
 		return true;
 	}
 
@@ -514,19 +530,24 @@ public class BuildingUpdate {
 		}
 
 		// Check if the value makes sense
-		String sourceStartData = bagWay.get("start_date");
-		if (sourceStartData == null || sourceStartData.isEmpty()) {
+		String bagStartDate = bagWay.get("start_date");
+		if (bagStartDate == null || bagStartDate.isEmpty()) {
 			return null;
 		}
 
 		// Check the target value
-		String targetStartDate = osmWay.get("start_date");
-		if (sourceStartData.equals(targetStartDate)) {
+		String osmStartDate = osmWay.get("start_date");
+		if (bagStartDate.equals(osmStartDate)) {
 			return null;
 		}
 
 		// Apply the tag change
-		return new ChangePropertyCommand(osmWay, "start_date", sourceStartData);
+		if (osmStartDate == null) {
+			resultSummary.addNote(tr("start_date={0} added", bagStartDate));
+		} else {
+			resultSummary.addNote(tr("start_date={0} set, was previously {1}", bagStartDate, osmStartDate));
+		}
+		return new ChangePropertyCommand(osmWay, "start_date", bagStartDate);
 	}
 
 
@@ -539,33 +560,13 @@ public class BuildingUpdate {
 		);
 	}
 
-	/** Print debug logging, only when enabled */
-	private void debug(String pattern, Object... args) {
-		if (DEBUG) {
-			Logging.debug(pattern, args);
-		}
-	}
-
 	private void printWayList(Collection<Way> ways) {
 		for (Way way : ways) {
-			debug("    way:"+way.getId());
-			debug("        area="+way.isArea());
-			debug("        containsClickedPoint="+way.getBBox().bounds(this.clickedLatLon));
-			debug("        building="+way.get("building"));
-			debug("        ref:bag="+way.get("ref:bag"));
+			BagQuickPlugin.debug("    way:"+way.getId());
+			BagQuickPlugin.debug("        area="+way.isArea());
+			BagQuickPlugin.debug("        containsClickedPoint="+way.getBBox().bounds(this.clickedLatLon));
+			BagQuickPlugin.debug("        building="+way.get("building"));
+			BagQuickPlugin.debug("        ref:bag="+way.get("ref:bag"));
 		}
 	}
-
-	private void notification(String message) {
-		this.notification(message, JOptionPane.INFORMATION_MESSAGE);
-		this.debug(message);
-	}
-	private void notification(String message, int messageType) {
-		debug("notification: "+message);
-		new Notification("<strong>" + tr("Bag Quick") + "</strong><br />" + message)
-				.setIcon(messageType)
-				.setDuration(Notification.TIME_LONG)
-				.show();
-	}
-
 }
