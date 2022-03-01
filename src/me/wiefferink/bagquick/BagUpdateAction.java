@@ -44,8 +44,7 @@ public class BagUpdateAction extends MapMode implements MouseListener {
     }
 
     private static Cursor getCursor() {
-        // TODO: update overlay image
-        return ImageProvider.getCursor("crosshair", "areaselector");
+        return ImageProvider.getCursor("crosshair", "upgrade");
     }
 
     @Override
