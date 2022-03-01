@@ -273,6 +273,8 @@ public class BuildingUpdate {
 		int osmNodeCount = osmWay.getNodesCount();
 		List<Node> osmNodes = osmWay.getNodes();
 		Set<Node> osmNodesLeft = new HashSet<>(osmNodes);
+
+		// TODO: when limiting distance of nodes to ~1m, just skip this algorithm and do a simple nearest point algo?
 		if (bagNodeCount < MAX_SLOW_PAIRING_NODE_COUNT && osmNodeCount < MAX_SLOW_PAIRING_NODE_COUNT) {  // use robust, but slower assignment
 			int N = Math.max(bagNodeCount, osmNodeCount);
 			double[][] cost = new double[N][N];
@@ -283,10 +285,15 @@ public class BuildingUpdate {
 			}
 
 			// TODO: should there be a max distance? Maybe only for nodes that are attached to other things
-			double maxDistance = 1;
 			for (int bagNodeIndex = 0; bagNodeIndex < bagNodeCount; bagNodeIndex++) {
 				for (int osmNodeIndex = 0; osmNodeIndex < osmNodeCount; osmNodeIndex++) {
-					double distance = bagNodes.get(bagNodeIndex).getCoor().distance(osmNodes.get(osmNodeIndex).getCoor());
+					Node osmNode = osmNodes.get(osmNodeIndex);
+
+					// Longer maximum distance when the node has no tags or other parent ways
+					// - idea is to not move around nodes too much
+					double maxDistance = (osmNode.isTagged() || osmNode.getParentWays().size() > 1) ? 1 : 10;
+
+					double distance = bagNodes.get(bagNodeIndex).getCoor().greatCircleDistance(osmNode.getCoor());
 					if (distance > maxDistance) {
 						cost[bagNodeIndex][osmNodeIndex] = Double.MAX_VALUE;
 					} else {
@@ -506,7 +513,7 @@ public class BuildingUpdate {
 			debug("        BAG node: {0} {1}", bagNode.get("name"), bagNode.getCoor());
 			Node osmNode = entry.getKey();
 			debug("        OSM node: {0} {1}", osmNode.get("name"), osmNode.getCoor());
-			debug("        distance: {0}", bagNode.getCoor().distance(osmNode.getCoor()));
+			debug("        distance: {0} m", bagNode.getCoor().greatCircleDistance(osmNode.getCoor()));
 		}
 	}
 
