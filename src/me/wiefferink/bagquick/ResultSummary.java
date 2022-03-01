@@ -3,6 +3,7 @@ package me.wiefferink.bagquick;
 import org.openstreetmap.josm.gui.Notification;
 
 import javax.swing.*;
+import java.lang.ref.SoftReference;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -14,6 +15,8 @@ import static org.openstreetmap.josm.tools.I18n.tr;
  * - Tracks warnings about potential issues
  */
 public class ResultSummary {
+
+	private static SoftReference<Notification> lastNotificationRef = null;
 
 	private boolean hasFailed = false;
 	/** Notes about the result, indicates what has changed */
@@ -87,10 +90,18 @@ public class ResultSummary {
 
 	private void notification(String message, int messageType) {
 		BagQuickPlugin.debug("notification: "+message.replace("<br />", "\n"));
-		new Notification("<strong>" + tr("Bag Quick") + "</strong><br />" + message)
+		Notification notification = new Notification("<strong>" + tr("Bag Quick") + "</strong><br />" + message)
 				.setIcon(messageType)
-				.setDuration(Notification.TIME_LONG)
-				.show();
+				.setDuration(Notification.TIME_LONG);
+
+		// Try replacing the last notification
+		// - otherwise all notifications queue up, which is not nice to work with when doing lots of updates
+		if (lastNotificationRef == null) {
+			notification.show();
+		} else {
+			notification.replaceExisting(lastNotificationRef.get());
+		}
+		lastNotificationRef = new SoftReference<>(notification);
 	}
 
 }
