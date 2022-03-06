@@ -12,17 +12,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+      - name: Checkout JOSM/josm in /
+        uses: actions/checkout@v3
+        with:
+          repository: JOSM/josm
+          ref: master
+
+      - name: Checkout JOSM/josm-plugins in /plugins
+        uses: actions/checkout@v3
+        with:
+          repository: JOSM/josm-plugins
+          ref: master
+          path: plugins
+
+      - name: Checkout nlthijs48/JOSM-BAG-quick in /plugins/bag-quick
+        uses: actions/checkout@v3
+        with:
+          path: plugins/bag-quick
+
+      - name: /
+        run: "ls -la"
+      - name: /plugins
+        run: "ls -la plugins"
+      - name: /plugins/bag-quick
+        run: "ls -la plugins/bag-quick"
 
       - name: Run Checkstyle with Ant
-        run: |
-          ant checkstyle
+        # Run inside the folder of this repository
+        working-directory: "plugins/bag-quick"
+        run: ant checkstyle
+
       - name: Upload report
         uses: actions/upload-artifact@v2
         with:
-          path: checkstyle-josm-bag-quick.xml
+          path: "plugins/bag-quick/checkstyle-josm-bag-quick.xml"
 
-      - uses: jwgmeligmeyling/checkstyle-github-action@master
+      - name: "Show report as check run annotations"
+        uses: jwgmeligmeyling/checkstyle-github-action@master
         with:
-          path: '**/checkstyle-josm-bag-quick.xml'
+          path: "plugins/bag-quick/checkstyle-josm-bag-quick.xml"
