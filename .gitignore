@@ -2,3 +2,6 @@ build/
 data/
 javadoc/
 *.iml
+
+# Checkstyle output file
+checkstyle-josm-bag-quick.xml
