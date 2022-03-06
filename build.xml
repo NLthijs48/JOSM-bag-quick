@@ -14,7 +14,7 @@
     <property name="plugin.class" value="me.wiefferink.bagquick.BagQuickPlugin"/>
     <property name="plugin.description" value="Action to quickly perform BAG updates"/>
     <!--<property name="plugin.icon" value="..."/>-->
-    <!--<property name="plugin.link" value="..."/>-->
+    <property name="plugin.link" value="https://github.com/NLthijs48/JOSM-bag-quick"/>
     <!--<property name="plugin.early" value="..."/>-->
     <!-- ods-bag is currently available upon request, not in the JOSM plugin directory -->
     <property name="plugin.requires" value="utilsplugin2;ods-bag"/>
