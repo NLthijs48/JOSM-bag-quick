@@ -451,10 +451,24 @@ public class BuildingUpdate {
 			resultSummary.addNote(trn("{0} node removed", "{0} nodes removed", nodesRemoved, nodesRemoved));
 		}
 
-		// Update start_date tag
-		Command updateStartDateCommand = computeStartDateUpdate();
-		if (updateStartDateCommand != null) {
-			updateBuildingCommands.add(updateStartDateCommand);
+		// Compute tag updates
+		for (Map.Entry<String, String> bagTagEntry : this.bagWay.getKeys().entrySet()) {
+			// Ignore tags prefixed with |ODS, those are only meant as background information
+			String tagName = bagTagEntry.getKey();
+			if (tagName.startsWith("|ODS")) {
+				continue;
+			}
+
+			// Skip updating building, might be more specific in OSM already
+			// TODO: improve this logic
+			if (tagName.equals("building")) {
+				continue;
+			}
+
+			Command tagUpdateCommand = computeTagUpdate(tagName);
+			if (tagUpdateCommand != null) {
+				updateBuildingCommands.add(tagUpdateCommand);
+			}
 		}
 
 		// Detect no updates case
@@ -541,16 +555,16 @@ public class BuildingUpdate {
 		UndoRedoHandler.getInstance().add(wayAndNodesCommand);
 
 		// Apply all tags of the BAG way to the OSM way (at least building/ref:bag/source/source:date/start_date)
-		// TODO: do this for existing buildings as well  to fix up tags
 		Collection<Command> tagsCommands = new LinkedList<>();
-		for (Map.Entry<String, String> sourceTag : this.bagWay.getKeys().entrySet()) {
+		for (Map.Entry<String, String> bagTagEntry : this.bagWay.getKeys().entrySet()) {
 			// Ignore tags prefixed with |ODS, those are only meant as background information
-			if (sourceTag.getKey().startsWith("|ODS")) {
+			if (bagTagEntry.getKey().startsWith("|ODS")) {
 				continue;
 			}
 
-			debug("    adding tag {0}={1}", sourceTag.getKey(), sourceTag.getValue());
-			tagsCommands.add(new ChangePropertyCommand(osmWay, sourceTag.getKey(), sourceTag.getValue()));
+			debug("    adding tag {0}={1}", bagTagEntry.getKey(), bagTagEntry.getValue());
+			resultSummary.addNote(tr("{0}={1} added", bagTagEntry.getKey(), bagTagEntry.getValue()));
+			tagsCommands.add(new ChangePropertyCommand(osmWay, bagTagEntry.getKey(), bagTagEntry.getValue()));
 		}
 
 		// TODO: when building=contruction warn about importing it? Or just use building=yes? Check with forum/discord
@@ -567,34 +581,36 @@ public class BuildingUpdate {
 		return true;
 	}
 
-	/** Compute update for the start_date tag */
-	private Command computeStartDateUpdate() {
+	/**
+	 * Compute update for a tag
+	 * @return null when the BAG does not contain the tag, or the target already contains the same value, otherwise a command to add/update it
+	 */
+	private Command computeTagUpdate(String tag) {
 		// Check if the tag is present
-		if (!bagWay.hasTag("start_date")) {
+		if (!bagWay.hasTag(tag)) {
 			return null;
 		}
 
 		// Check if the value makes sense
-		String bagStartDate = bagWay.get("start_date");
-		if (bagStartDate == null || bagStartDate.isEmpty()) {
+		String bagTagValue = bagWay.get(tag);
+		if (bagTagValue == null || bagTagValue.isEmpty()) {
 			return null;
 		}
 
 		// Check the target value
-		String osmStartDate = osmWay.get("start_date");
-		if (bagStartDate.equals(osmStartDate)) {
+		String osmTagValue = osmWay.get(tag);
+		if (bagTagValue.equals(osmTagValue)) {
 			return null;
 		}
 
 		// Apply the tag change
-		if (osmStartDate == null) {
-			resultSummary.addNote(tr("start_date={0} added", bagStartDate));
+		if (osmTagValue == null) {
+			resultSummary.addNote(tr("{0}={1} added", tag, bagTagValue));
 		} else {
-			resultSummary.addNote(tr("start_date={0} set, was previously {1}", bagStartDate, osmStartDate));
+			resultSummary.addNote(tr("{0}={1} set, was previously {2}", tag, bagTagValue, osmTagValue));
 		}
-		return new ChangePropertyCommand(osmWay, "start_date", bagStartDate);
+		return new ChangePropertyCommand(osmWay, tag, bagTagValue);
 	}
-
 
 	/** Search box around the clicked point */
 	private BBox getSearchBox() {
