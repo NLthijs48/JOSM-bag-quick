@@ -39,7 +39,6 @@ import static org.openstreetmap.josm.tools.I18n.trn;
 // TODO:
 // - extract findOsmWay and findBagWay to a Search class
 // - extract node pairing algorithms to separate classes implementing a certain interface
-// - collect info/warning notes for a summary at the end
 
 /**
  * Represents a 1-click BAG to OSM building update run
@@ -76,7 +75,7 @@ public class BuildingUpdate {
 	private Way osmWay;
 
 	// Summary
-	private ResultSummary resultSummary;
+	private final ResultSummary resultSummary;
 
 	public BuildingUpdate(Point clickedPoint) {
 		this.resultSummary = new ResultSummary();
