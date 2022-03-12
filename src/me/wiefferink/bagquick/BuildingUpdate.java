@@ -105,10 +105,16 @@ public class BuildingUpdate {
 			return false;
 		}
 
+		// Show the BAG way as selected
+		bagDataSet.setSelected(this.bagWay);
+
 		// Find the Way on the OSM layer
 		if (!findOsmWay()) {
 			return createNewBuilding();
 		}
+
+		// Show the OSM way as selected
+		osmDataSet.setSelected(this.osmWay);
 
 		debug("    found OSM way: {0}", osmWay);
 		return updateExistingBuilding();
@@ -552,6 +558,9 @@ public class BuildingUpdate {
 		// Execute adding way+nodes
 		Command wayAndNodesCommand = SequenceCommand.wrapIfNeeded(tr("Create new BAG building: way+nodes: {0}", bagRef), wayAndNodesCommands);
 		UndoRedoHandler.getInstance().add(wayAndNodesCommand);
+
+		// Select the new OSM way
+		osmDataSet.setSelected(osmWay);
 
 		// TODO: maybe track this as header or so to make bold/bigger?
 		resultSummary.addNote(tr("New BAG building imported with {0} nodes", bagWay.getNodesCount()));
