@@ -553,6 +553,9 @@ public class BuildingUpdate {
 		Command wayAndNodesCommand = SequenceCommand.wrapIfNeeded(tr("Create new BAG building: way+nodes: {0}", bagRef), wayAndNodesCommands);
 		UndoRedoHandler.getInstance().add(wayAndNodesCommand);
 
+		// TODO: maybe track this as header or so to make bold/bigger?
+		resultSummary.addNote(tr("New BAG building imported with {0} nodes", bagWay.getNodesCount()));
+
 		// Apply all tags of the BAG way to the OSM way (at least building/ref:bag/source/source:date/start_date)
 		Collection<Command> tagsCommands = new LinkedList<>();
 		for (Map.Entry<String, String> bagTagEntry : this.bagWay.getKeys().entrySet()) {
@@ -573,10 +576,6 @@ public class BuildingUpdate {
 		UndoRedoHandler.getInstance().add(tagsCommand);
 
 		// Notify about the result
-		resultSummary.addNote(tr("New BAG building imported with {0} nodes", bagWay.getNodesCount())); // TODO: maybe use setHeader() or so
-		for (String osmWayTag : osmWay.getKeys().keySet()) {
-			resultSummary.addNote(tr(osmWayTag + "=" + osmWay.get(osmWayTag)));
-		}
 		return true;
 	}
 

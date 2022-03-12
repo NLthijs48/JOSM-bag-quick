@@ -20,9 +20,9 @@ public class ResultSummary {
 
 	private boolean hasFailed = false;
 	/** Notes about the result, indicates what has changed */
-	private List<String> notes = new LinkedList<>();
+	private final List<String> notes = new LinkedList<>();
 	/** Warnings about rough edges in the result */
-	private List<String> warnings = new LinkedList<>();
+	private final List<String> warnings = new LinkedList<>();
 
 	public void addNote(String message) {
 		this.notes.add(message);
@@ -44,7 +44,6 @@ public class ResultSummary {
 		}
 
 		if (this.notes.isEmpty() && this.warnings.isEmpty()) {
-			// TODO: better message than this?
 			notification(tr("Action completed without notes/warnings"), JOptionPane.INFORMATION_MESSAGE);
 			return;
 		}
@@ -69,9 +68,8 @@ public class ResultSummary {
 
 		if (!notes.isEmpty()) {
 			if (notes.size() == 1) {
-				result.add(tr("Note: {0}", notes.get(0)));
+				result.add(tr("{0}", notes.get(0)));
 			} else {
-				result.add(tr("Notes:"));
 				StringBuilder list = new StringBuilder("<ul>");
 				for (String notes : notes) {
 					list.append("<li>");
