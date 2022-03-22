@@ -544,15 +544,26 @@ public class BuildingUpdate {
 		String bagRef = this.bagWay.get("ref:bag");
 		Collection<Command> wayAndNodesCommands = new LinkedList<>();
 
-		// Create a way based on the source coordinates
+		// Add all nodes to the Way based on the source coordinates
 		Way osmWay = new Way();
+		int nodeIndex = 0;
 		for (Node bagNode : this.bagWay.getNodes()) {
+			// Detect last node: add the first Node again to close the Way
+			// (prevent creating a duplicate node for the last one in the same spot as the first one)
+			if (nodeIndex == this.bagWay.getNodesCount() - 1) {
+				osmWay.addNode(osmWay.firstNode());
+				break;
+			}
+
 			Node osmNode = new Node();
 			osmNode.setCoor(bagNode.getCoor());
 			osmWay.addNode(osmNode);
 			wayAndNodesCommands.add(new AddCommand(osmDataSet, osmNode));
-			// TODO: double check this creates a closed way, or does it duplicate the start/end node?
+
+			nodeIndex++;
 		}
+
+		// Add the way itself
 		wayAndNodesCommands.add(new AddCommand(osmDataSet, osmWay));
 
 		// Execute adding way+nodes
