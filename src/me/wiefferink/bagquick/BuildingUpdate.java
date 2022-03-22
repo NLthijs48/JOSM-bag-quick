@@ -49,10 +49,21 @@ public class BuildingUpdate {
 
 	/**
 	 * Up to this number of nodes, do slow pair matching that is O(n^2)
-	 * - For higher node counts fall back to O(n*log(n)) algorithm
-	 * - TODO: probably up to 50 or so nodes is fine?
+	 * - For higher node counts fall back to a simpler algorithm that only matches nodes that are close to each other
 	 */
-	private static final int MAX_SLOW_PAIRING_NODE_COUNT = 20;
+	private static final int MAX_SLOW_PAIRING_NODE_COUNT = 25;
+
+	/**
+	 * Number of meters nodes are allowed to differ from BAG before being updated
+	 * - 10cm is close enough, consider that accurate
+	 */
+	private static final double DESIRED_PRECISION_METERS = 0.1;
+
+	/** Maximum distance existing nodes should be moved around when already tagged with something */
+	private static final double MAX_NODE_MOVE_METERS_TAGGED = 0.01;
+
+	/** Maximum distance existing nodes should be moved around when already tagged with something */
+	private static final double MAX_NODE_MOVE_METERS_UNTAGGED = 5;
 
 	/** The point on the map that has been clicked with the update tool */
 	private final Point clickedPoint;
@@ -268,10 +279,8 @@ public class BuildingUpdate {
 			return false;
 		}
 
-		// Match BAG nodes to OSM nodes in a way that moves them as little as possible
-		// - code roughly based on the ReplaceBuilding action
+		// Setup node lists to work with
 		Map<Node, Node> bagToOsmNode = new HashMap<>();
-		boolean useSlow = true;
 		int bagNodeCount = bagWay.getNodesCount();
 		List<Node> bagNodes = bagWay.getNodes();
 		Set<Node> bagNodesLeft = new HashSet<>(bagNodes);
@@ -279,8 +288,11 @@ public class BuildingUpdate {
 		List<Node> osmNodes = osmWay.getNodes();
 		Set<Node> osmNodesLeft = new HashSet<>(osmNodes);
 
-		// TODO: when limiting distance of nodes to ~1m, just skip this algorithm and do a simple nearest point algo?
-		if (bagNodeCount < MAX_SLOW_PAIRING_NODE_COUNT && osmNodeCount < MAX_SLOW_PAIRING_NODE_COUNT) {  // use robust, but slower assignment
+		boolean useSlow = bagNodeCount < MAX_SLOW_PAIRING_NODE_COUNT && osmNodeCount < MAX_SLOW_PAIRING_NODE_COUNT;
+
+		// Match BAG nodes to OSM nodes in a way that moves them as little as possible
+		// - code roughly based on the ReplaceBuilding action
+		if (useSlow) {  // use robust, but slower assignment
 			int N = Math.max(bagNodeCount, osmNodeCount);
 			double[][] cost = new double[N][N];
 			for (int i = 0; i < N; i++) {
@@ -289,17 +301,16 @@ public class BuildingUpdate {
 				}
 			}
 
-			// TODO: should there be a max distance? Maybe only for nodes that are attached to other things
 			for (int bagNodeIndex = 0; bagNodeIndex < bagNodeCount; bagNodeIndex++) {
 				for (int osmNodeIndex = 0; osmNodeIndex < osmNodeCount; osmNodeIndex++) {
 					Node osmNode = osmNodes.get(osmNodeIndex);
 
 					// Longer maximum distance when the node has no tags or other parent ways
 					// - idea is to not move around nodes too much
-					double maxDistance = (osmNode.isTagged() || osmNode.getParentWays().size() > 1) ? 1 : 10;
+					double maxDistance = (osmNode.isTagged() || osmNode.getParentWays().size() > 1) ? MAX_NODE_MOVE_METERS_TAGGED : MAX_NODE_MOVE_METERS_UNTAGGED;
 
 					double distance = bagNodes.get(bagNodeIndex).getCoor().greatCircleDistance(osmNode.getCoor());
-					if (distance > maxDistance) {
+					if (distance >= maxDistance) {
 						cost[bagNodeIndex][osmNodeIndex] = Double.MAX_VALUE;
 					} else {
 						cost[bagNodeIndex][osmNodeIndex] = distance;
@@ -334,17 +345,21 @@ public class BuildingUpdate {
 			}
 		}
 
-		// TODO: implement a backup, like ReplaceBuilding does
+		// Quick backup algorithm
 		if (!useSlow) {
-            /*
-            for (Node n : geometryPool) {
-                Node nearest = findNearestNode(n, nodePool);
-                if (nearest != null) {
-                    nodePairs.put(n, nearest);
-                    nodePool.remove(nearest);
-                }
+            for (Node bagNode : bagNodes) {
+				// Skip when already done (first and last Node will be the same one)
+				if (!bagNodesLeft.contains(bagNode)) {
+					continue;
+				}
+
+                Node nearestOsmNode = findNearestNode(bagNode, osmNodesLeft);
+                if (nearestOsmNode != null) {
+					osmNodesLeft.remove(nearestOsmNode);
+					bagNodesLeft.remove(bagNode);
+					bagToOsmNode.put(bagNode, nearestOsmNode);
+				}
             }
-            */
 		}
 
 		// debug logging
@@ -405,7 +420,7 @@ public class BuildingUpdate {
 		for (Node bagNode : bagToOsmNode.keySet()) {
 			Node osmNode = bagToOsmNode.get(bagNode);
 			LatLon bagCoor = bagNode.getCoor();
-			if (bagCoor.equalsEpsilon(osmNode.getCoor())) {
+			if (bagCoor.greatCircleDistance(osmNode.getCoor()) < DESIRED_PRECISION_METERS) {
 				nodesUpToDate++;
 				continue;
 			}
@@ -486,6 +501,41 @@ public class BuildingUpdate {
 		Command combinedCommand = SequenceCommand.wrapIfNeeded(tr("BAG update of {0}", bagRef), updateBuildingCommands);
 		UndoRedoHandler.getInstance().add(combinedCommand);
 		return true;
+	}
+
+	/**
+	 * Find the nearest node in a set
+	 * @param targetNode The node to get closest to
+	 * @param optionNodes The options to choose from
+	 * @return null if there is no Node close enough, otherwise the closest node
+	 */
+	static Node findNearestNode(Node targetNode, Collection<Node> optionNodes) {
+		// Check exact match
+		if (optionNodes.contains(targetNode)) {
+			return targetNode;
+		}
+
+		// Find nearest
+		// - use cheap square distance calculation here
+		Node nearest = null;
+		double nearestDistance = 0;
+		LatLon targetCoor = targetNode.getCoor();
+		for (Node optionNode : optionNodes) {
+			double optionNodeDistance = optionNode.getCoor().distanceSq(targetCoor);
+			if (nearest == null || optionNodeDistance < nearestDistance) {
+				nearestDistance = optionNodeDistance;
+				nearest = optionNode;
+			}
+		}
+
+		// Check if it matches the required precision
+		// - only use 'expensive' real distance in meters here once
+		// - consider all nodes 'tagged' because this algoritm should not move them around much
+		if (targetCoor.greatCircleDistance(nearest.getCoor()) >= MAX_NODE_MOVE_METERS_TAGGED) {
+			return null;
+		}
+
+		return nearest;
 	}
 
 	/** If there are notes on the building, let the user confirm before doing updates */
