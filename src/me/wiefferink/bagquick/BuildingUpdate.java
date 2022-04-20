@@ -711,7 +711,7 @@ public class BuildingUpdate {
 		if (osmTagValue == null) {
 			resultSummary.addNote(tr("{0}={1} added", tag, bagTagValue));
 		} else {
-			resultSummary.addNote(tr("{0}={1} set, was previously {2}", tag, bagTagValue, osmTagValue));
+			resultSummary.addNote(tr("{0}={1}, previously {2}", tag, bagTagValue, osmTagValue));
 		}
 		return new ChangePropertyCommand(osmWay, tag, bagTagValue);
 	}
