@@ -408,8 +408,9 @@ public class BuildingUpdate {
 		Collection<Command> updateBuildingCommands = new LinkedList<>();
 
 		// Update nodes in the OSM Way
-		// TODO: skip when the same
-		updateBuildingCommands.add(new ChangeNodesCommand(osmWay, resultNodes));
+		if (!osmWay.getNodes().equals(resultNodes)) {
+			updateBuildingCommands.add(new ChangeNodesCommand(osmWay, resultNodes));
+		}
 
 		// Move existing nodes to the correct location
 		// TODO: double check if nodes are allowed to be moved:
