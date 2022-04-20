@@ -480,9 +480,9 @@ public class BuildingUpdate {
 				continue;
 			}
 
-			// Skip updating building, might be more specific in OSM already
-			// TODO: improve this logic
-			if (tagName.equals("building")) {
+			// Skip updating building when already present, might be more specific in OSM already
+			// TODO: improve this logic by refining it whenever the BAG has a more specific value (for example 'apartments' instead of 'yes')
+			if (tagName.equals("building") && this.osmWay.get("building") != null) {
 				continue;
 			}
 
