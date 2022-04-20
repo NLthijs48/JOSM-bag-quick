@@ -14,7 +14,12 @@ import org.openstreetmap.josm.data.osm.BBox;
 import org.openstreetmap.josm.data.osm.DataSet;
 import org.openstreetmap.josm.data.osm.DefaultNameFormatter;
 import org.openstreetmap.josm.data.osm.Node;
+import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Way;
+import org.openstreetmap.josm.data.validation.OsmValidator;
+import org.openstreetmap.josm.data.validation.Test;
+import org.openstreetmap.josm.data.validation.ValidationTask;
+import org.openstreetmap.josm.data.validation.util.AggregatePrimitivesVisitor;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapView;
 import org.openstreetmap.josm.gui.layer.Layer;
@@ -492,6 +497,7 @@ public class BuildingUpdate {
 			}
 		}
 
+
 		// Detect no updates case
 		if (updateBuildingCommands.isEmpty()) {
 			resultSummary.addNote(tr("Building is already up-to-date"));
@@ -501,6 +507,10 @@ public class BuildingUpdate {
 		// Execute the changes
 		Command combinedCommand = SequenceCommand.wrapIfNeeded(tr("BAG update of {0}", bagRef), updateBuildingCommands);
 		UndoRedoHandler.getInstance().add(combinedCommand);
+
+		// Run validation on the updated building
+		runValidation();
+
 		return true;
 	}
 
@@ -537,6 +547,25 @@ public class BuildingUpdate {
 		}
 
 		return nearest;
+	}
+
+	private void runValidation() {
+		// Initialize the validator
+		OsmValidator.initializeTests();
+		Collection<Test> tests = OsmValidator.getEnabledTests(false);
+		if (tests.isEmpty()) {
+			return;
+		}
+
+		// Get all primitives based on the OSM way (limits errors/warnings to only the updated/created building)
+		AggregatePrimitivesVisitor primitivesVisitor = new AggregatePrimitivesVisitor();
+		Collection<OsmPrimitive> selection = primitivesVisitor.visit(Arrays.asList(this.osmWay));
+
+		// Run the validator on the OSM way
+		MainApplication.worker.submit(new ValidationTask(tests, selection, null));
+
+		// TODO: this is not enough for duplicate node detection, run for osmWay + all other ways/nodes around it?
+		// TODO: auto-fix certain or all things?
 	}
 
 	/** If there are notes on the building, let the user confirm before doing updates */
@@ -645,6 +674,9 @@ public class BuildingUpdate {
 		// Execute the changes
 		Command tagsCommand = SequenceCommand.wrapIfNeeded(tr("Create new BAG building: add tags: {0}", bagRef), tagsCommands);
 		UndoRedoHandler.getInstance().add(tagsCommand);
+
+		// Validate results
+		runValidation();
 
 		// Notify about the result
 		return true;
