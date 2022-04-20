@@ -18,7 +18,9 @@ import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Way;
 import org.openstreetmap.josm.data.validation.OsmValidator;
 import org.openstreetmap.josm.data.validation.Test;
+import org.openstreetmap.josm.data.validation.TestError;
 import org.openstreetmap.josm.data.validation.ValidationTask;
+import org.openstreetmap.josm.data.validation.tests.DuplicateNode;
 import org.openstreetmap.josm.data.validation.util.AggregatePrimitivesVisitor;
 import org.openstreetmap.josm.gui.MainApplication;
 import org.openstreetmap.josm.gui.MapView;
@@ -27,6 +29,7 @@ import org.openstreetmap.josm.gui.layer.OsmDataLayer;
 import org.openstreetmap.josm.tools.Geometry;
 
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -60,9 +63,9 @@ public class BuildingUpdate {
 
 	/**
 	 * Number of meters nodes are allowed to differ from BAG before being updated
-	 * - 10cm is close enough, consider that accurate
+	 * - 1 cm is close enough, consider that accurate
 	 */
-	private static final double DESIRED_PRECISION_METERS = 0.1;
+	private static final double DESIRED_PRECISION_METERS = 0.01;
 
 	/** Maximum distance existing nodes should be moved around when already tagged with something */
 	private static final double MAX_NODE_MOVE_METERS_TAGGED = 0.01;
@@ -512,6 +515,7 @@ public class BuildingUpdate {
 		UndoRedoHandler.getInstance().add(combinedCommand);
 
 		// Run validation on the updated building
+		fixDuplicateNodes();
 		runValidation();
 
 		return true;
@@ -544,7 +548,7 @@ public class BuildingUpdate {
 
 		// Check if it matches the required precision
 		// - only use 'expensive' real distance in meters here once
-		// - consider all nodes 'tagged' because this algoritm should not move them around much
+		// - consider all nodes 'tagged' because this algorithm should not move them around much
 		if (targetCoor.greatCircleDistance(nearest.getCoor()) >= MAX_NODE_MOVE_METERS_TAGGED) {
 			return null;
 		}
@@ -552,9 +556,72 @@ public class BuildingUpdate {
 		return nearest;
 	}
 
+	/**
+	 * Fix duplicate node errors
+	 * - Helps to auto-connect to adjacent buildings
+	 */
+	private void fixDuplicateNodes() {
+		// Fix all duplicated nodes
+		DuplicateNode duplicateNode = new DuplicateNode();
+		duplicateNode.setBeforeUpload(false);
+		duplicateNode.setPartialSelection(true);
+		duplicateNode.startTest(null);
+		// Simply go through all nodes in the DataSet
+		for (Node node : this.osmDataSet.getNodes()) {
+			duplicateNode.visit(node);
+		}
+
+		// Get error list and cleanup
+		duplicateNode.endTest();
+		List<TestError> duplicateNodeErrors = new ArrayList<>(duplicateNode.getErrors());
+		duplicateNode.clear();
+
+		Set<Node> osmNodes = new HashSet<>(this.osmWay.getNodes());
+		if (!duplicateNodeErrors.isEmpty()) {
+			debug(trn("Found {0} node error", "Found {0} node errors", duplicateNodeErrors.size(), duplicateNodeErrors.size()));
+		}
+		for (TestError duplicateNodeError : duplicateNodeErrors) {
+			// Check if this duplicate node error is about our OSM Way
+			boolean connectedToWay = false;
+			for (OsmPrimitive duplicatePrimitive : duplicateNodeError.getPrimitives()) {
+				if (osmNodes.contains(duplicatePrimitive)) {
+					connectedToWay = true;
+					break;
+				}
+			}
+			if (!connectedToWay) {
+				continue;
+			}
+
+			// Not fixable, skip
+			if (!duplicateNodeError.isFixable()) {
+				debug("    Duplicate node error not fixable");
+				continue;
+			}
+
+			// No fix available, skip
+			Command fixDuplicateNodeCommand = duplicateNodeError.getFix();
+			if (fixDuplicateNodeCommand == null) {
+				debug("    Duplicate node error has no fix available");
+				continue;
+			}
+
+			// Do the fix
+			// - don't bundle all fixes, later fixes need earlier ones to already be completed to be consistent
+			//   (otherwise referencing already-deleted nodes and such)
+			UndoRedoHandler.getInstance().add(fixDuplicateNodeCommand);
+		}
+	}
+
+	/**
+	 * Run the validator on the changed OSM Way
+	 * - Means errors/warnings show up directly, instead of only when uploading (when you might have moved along to other buildings already)
+	 */
 	private void runValidation() {
 		// Initialize the validator
 		OsmValidator.initializeTests();
+
+		// Get the enabled tests
 		Collection<Test> tests = OsmValidator.getEnabledTests(false);
 		if (tests.isEmpty()) {
 			return;
@@ -566,9 +633,6 @@ public class BuildingUpdate {
 
 		// Run the validator on the OSM way
 		MainApplication.worker.submit(new ValidationTask(tests, selection, null));
-
-		// TODO: this is not enough for duplicate node detection, run for osmWay + all other ways/nodes around it?
-		// TODO: auto-fix certain or all things?
 	}
 
 	/** If there are notes on the building, let the user confirm before doing updates */
@@ -679,6 +743,7 @@ public class BuildingUpdate {
 		UndoRedoHandler.getInstance().add(tagsCommand);
 
 		// Validate results
+		fixDuplicateNodes();
 		runValidation();
 
 		// Notify about the result
