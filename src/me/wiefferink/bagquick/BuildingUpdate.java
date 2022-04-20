@@ -381,18 +381,21 @@ public class BuildingUpdate {
 		// Apply node updates
 		// - Loop through the BAG nodes in-order here to build the Way correctly
 		List<Node> resultNodes = new LinkedList<>();
-		List<Node> nodesToAdd = new LinkedList<>();
+		Map<LatLon, Node> nodesToAdd = new HashMap<>();
 		for (Node bagNode : bagNodes) {
 			Node resultNode;
-			LatLon bagCoor = bagNode.getCoor();
+			LatLon bagLatLon = bagNode.getCoor();
 			if (bagToOsmNode.containsKey(bagNode)) {
 				// Use the mapped target node (update location later with MoveCommand)
 				resultNode = bagToOsmNode.get(bagNode);
+			} else if (nodesToAdd.containsKey(bagLatLon)) {
+				// Already created a Node for this location, use that (important for connecting the first and last Node together)
+				resultNode = nodesToAdd.get(bagLatLon);
 			} else {
 				// Create a new Node, an additional one is required
 				resultNode = new Node();
-				resultNode.setCoor(bagCoor);
-				nodesToAdd.add(resultNode);
+				resultNode.setCoor(bagLatLon);
+				nodesToAdd.put(bagLatLon, resultNode);
 			}
 
 			resultNodes.add(resultNode);
@@ -401,7 +404,7 @@ public class BuildingUpdate {
 		// Create new nodes
 		Collection<Command> createNodesCommands = new LinkedList<>();
 		if (!nodesToAdd.isEmpty()) {
-			for (Node nodeToAdd : nodesToAdd) {
+			for (Node nodeToAdd : nodesToAdd.values()) {
 				createNodesCommands.add(new AddCommand(osmWay.getDataSet(), nodeToAdd));
 			}
 
