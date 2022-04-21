@@ -25,7 +25,24 @@ After this data is downloaded the 'Action' in the plugin allows you to click a b
     - `nl-bag` for a couple validations
     - `address_outside_buildign.mapcss` for warnings about address nodes outside of buildings
     - `nl-pdok-report` to report data issues to PDOK
-6. Restart JOSM to activate the plugins
+6. Install the `bag-quick` plugin
+7. Restart JOSM to activate the plugins
+
+## Usage
+1. Enable ODS bag import using the menu at the top: `ODS` > `Enable` > `BAG`
+    - A `BAG ODS` and `BAG OSM` layer should show up in the `Layers` panel
+2. Do a download of the area you want to update in using `ODS` > `Download` (using the regular download button won't work)
+    - Select an area in the popup
+    - Click `Download`
+3. Activate the `BAG update` tool using either:
+    - `CTRL+SHIFT+A`
+    - `Tools` > `BAG update`
+4. Click on building to import/update it
+    - A message in the bottom left corner will indicate the result
+    - The `Validation Results` panel might show errors/warnings, solve those
+5. Verify the results on the `BAG OSM` layer
+6. Import/update more buildings, and possibly download more data as well until you are done
+7. Upload the results (solving any warnings before upload)
 
 ## Notes
 Licenced with GPL-v3.0, see `GPL-v3.0.txt` in this repository.
