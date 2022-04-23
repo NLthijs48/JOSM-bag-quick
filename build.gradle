@@ -19,7 +19,8 @@ base.archivesBaseName = "bag-quick"
 def base_version = '1.0.0'
 // Commit SHA that triggered this build, used for development builds on Github Actions
 def commit_sha = System.getenv('GITHUB_SHA')
-version = commit_sha ? base_version + "#" + commit_sha.substring(0, 16) : base_version
+// Use '+' sign for the hash, https://semver.org/ recommends for build metadata (will be ignored for version comparisons)
+version = commit_sha ? base_version + "+" + commit_sha.substring(0, 16) : base_version
 
 // Configure class files and resources
 sourceSets {
