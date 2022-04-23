@@ -28,8 +28,16 @@ jobs:
         with:
           arguments: jar
 
+      - name: /
+        run: "ls -la"
+      - name: /build
+        run: "ls -la build"
+      - name: /build/dist
+        run: "ls -la build/dist"
+
       - name: Upload bag-quick.jar
         uses: actions/upload-artifact@v3
         with:
-          name: build-reports
+          name: bag-quick.jar
           path: build/dist/bag-quick.jar
+          if-no-files-found: error
