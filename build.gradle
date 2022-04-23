@@ -13,6 +13,9 @@ compileJava {
     options.compilerArgs.addAll(['--release', '8'])
 }
 
+// Generate files like 'bag-quick.jar' (otherwise it will depend on the parent directory, which is not always the same)
+base.archivesBaseName = "bag-quick"
+
 // Configure class files and resources
 sourceSets {
     main {
