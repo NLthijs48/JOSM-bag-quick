@@ -1,3 +1,5 @@
+[![Build jar](https://github.com/NLthijs48/JOSM-bag-quick/actions/workflows/build.yml/badge.svg?event=push)](https://github.com/NLthijs48/JOSM-bag-quick/actions/workflows/build.yml)
+
 # BAG Quick 
 
 Plugin for the [JSOM](https://josm.openstreetmap.de/) editor for [OpenStreetMap](https://www.openstreetmap.org/) to do 1-click updates of buildings in The Netherlands based on the [official BAG data](https://bag.basisregistraties.overheid.nl/) ([browse data online](https://bagviewer.kadaster.nl/lvbag/bag-viewer)).
