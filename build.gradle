@@ -1,0 +1,58 @@
+plugins {
+    // Plugin for easy JSOM plugin builds: https://gitlab.com/JOSM/gradle-josm-plugin
+    // - 0.8.0 does not work with pluginDependencies somehow, not sure why yet
+    id 'org.openstreetmap.josm' version '0.7.1'
+}
+
+// JOSM supports Java 8 and above, so do that for the plugin as well
+java {
+    sourceCompatibility = 1.8
+    targetCompatibility = 1.8
+}
+compileJava {
+    options.compilerArgs.addAll(['--release', '8'])
+}
+
+// Configure class files and resources
+sourceSets {
+    main {
+        java {
+            srcDirs = ["src/main"]
+        }
+        resources {
+            srcDirs = ["src/main/resources"]
+        }
+    }
+}
+
+// Add additional files to the .jar output
+jar {
+    from 'README.md'
+    from 'GPL-v3.0.txt'
+}
+
+josm {
+    josmCompileVersion = 'tested'
+    manifest {
+        description = 'Quickly perform BAG updates with a single click action'
+        mainClass = 'me.wiefferink.bagquick.BagQuickPlugin'
+        // Stable release of 2022-01-03
+        minJosmVersion = 18303
+        author = 'Thijs Wiefferink'
+        version = '1.0.0'
+        canLoadAtRuntime = true
+        website = new URL('https://github.com/NLthijs48/JOSM-bag-quick')
+        pluginDependencies << 'utilsplugin2' << 'ods-bag'
+    }
+    i18n {
+        bugReportEmail = 'josm-bag-quick@wiefferink.me'
+    }
+
+}
+
+// Add repository of a directory, which includes plugins that currently are not available in a Maven repo
+repositories {
+    flatDir {
+        dirs 'libs'
+    }
+}

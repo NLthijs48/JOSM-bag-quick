@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<osm version='0.6' upload='false' generator='JOSM'>
+  <node id='-105503' lat='52.40504417482' lon='6.90386074304'>
+    <tag k='name' v='3' />
+  </node>
+  <node id='-105504' lat='52.40504400465' lon='6.90396584391' />
+  <node id='-105505' lat='52.4050701432' lon='6.90370196979'>
+    <tag k='name' v='1' />
+  </node>
+  <node id='-105506' lat='52.40501844247' lon='6.90386058987'>
+    <tag k='name' v='4' />
+  </node>
+  <node id='-105507' lat='52.40501879456' lon='6.90370166414'>
+    <tag k='name' v='5' />
+  </node>
+  <node id='-105508' lat='52.40506979111' lon='6.90386089552'>
+    <tag k='name' v='2' />
+  </node>
+  <way id='-104814'>
+    <nd ref='-105503' />
+    <nd ref='-105504' />
+    <tag k='highway' v='service' />
+    <tag k='name' v='#1 Connected driveway' />
+    <tag k='service' v='driveway' />
+    <tag k='surface' v='paving_stones' />
+  </way>
+  <way id='-104815'>
+    <nd ref='-105507' />
+    <nd ref='-105505' />
+    <nd ref='-105508' />
+    <nd ref='-105503' />
+    <nd ref='-105506' />
+    <nd ref='-105507' />
+    <tag k='building' v='yes' />
+    <tag k='name' v='#1 Connected driveway' />
+    <tag k='ref:bag' v='1' />
+    <tag k='source' v='BAG' />
+    <tag k='source:date' v='2000-01-01' />
+  </way>
+</osm>

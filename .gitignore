@@ -2,6 +2,7 @@ build/
 data/
 javadoc/
 *.iml
+.gradle/
 
 # Checkstyle output file
 checkstyle-josm-bag-quick.xml
