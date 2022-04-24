@@ -29,7 +29,7 @@ public class BagUpdateAction extends MapMode implements MouseListener {
             Shortcut.registerShortcut(
                 "tools:bagquick",
                 tr("Tools: {0}", tr("Bag Quick Update")),
-                KeyEvent.VK_A,
+                KeyEvent.VK_G,
                 Shortcut.ALT_CTRL
             ),
             getCursor()

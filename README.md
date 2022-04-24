@@ -37,7 +37,7 @@ After this data is downloaded the 'Action' in the plugin allows you to click a b
     - Select an area in the popup
     - Click `Download`
 3. Activate the `BAG update` tool using either:
-    - `CTRL+SHIFT+A`
+    - `CTRL+ALT+G`
     - `Tools` > `BAG update`
 4. Click on building to import/update it
     - A message in the bottom left corner will indicate the result
