@@ -84,9 +84,10 @@ public class BagUpdateAction extends MapMode implements MouseListener {
             try {
                 BuildingUpdate buildingUpdate = new BuildingUpdate(clickedPoint);
                 buildingUpdate.execute();
-            } catch (Exception ex) {
+            } catch (Exception exception) {
                 Logging.error("Failed to do a BAG update");
-                Logging.error(ex);
+                Logging.error(exception);
+                new BugReportDialog(exception);
             }
         });
     }
